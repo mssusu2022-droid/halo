@@ -118,6 +118,7 @@ tasks.register('createChecksums', Checksum) {
 }
 
 tasks.register('copyUiDist', Copy) {
+    dependsOn ':ui:doBuild'
     from project(':ui').layout.buildDirectory.dir('dist')
     into layout.buildDirectory.dir('resources/main')
     mustRunAfter ':ui:doBuild'
