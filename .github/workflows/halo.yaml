@@ -1,6 +1,16 @@
 name: Halo Workflow
 
 on:
+  workflow_dispatch:
+    inputs:
+      dockerfile_build:
+        description: "Build and push Dockerfile image to GHCR (fork-friendly)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
   pull_request:
     branches:
       - main
@@ -130,6 +140,23 @@ jobs:
           f2c-registry-token: ${{ secrets.F2C_REGISTRY_TOKEN }}
           push: true
           platforms: linux/amd64,linux/arm64/v8,linux/ppc64le,linux/s390x
+
+  dockerfile-build-and-push-fork:
+    if: github.event_name == 'workflow_dispatch' && inputs.dockerfile_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+      - name: Build Halo Artifacts For Dockerfile
+        run: ./gradlew clean && ./gradlew downloadPluginPresets && ./gradlew build -x check
+      - name: Docker Buildx and Push (Dockerfile)
+        uses: ./.github/actions/docker-buildx-push
+        with:
+          image-name: halo-dev-dockerfile
+          ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+          push: true
+          platforms: linux/amd64
 
   e2e-test:
     if: github.repository == 'halo-dev/halo' && always() && needs.build.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'push')
