@@ -1,0 +1,1 @@
+trigger workflow on release-224-image branch for image build
