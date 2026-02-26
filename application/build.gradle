@@ -213,13 +213,15 @@ def archiveFileProvider = tasks.named('bootJar', BootJar).<RegularFile> flatMap 
 tasks.register('publishToGhcr', BootBuildImage) {
     def ghcrUserProvider = providers.environmentVariable('GHCR_USERNAME')
     def ghcrTokenProvider = providers.environmentVariable('GHCR_TOKEN')
+    def ghcrNamespaceProvider = providers.environmentVariable('GHCR_NAMESPACE')
+            .orElse('halo-dev')
 
     group = 'publishing'
     description = 'Build and publish the Docker image to GitHub Container Registry.'
-    imageName = "ghcr.io/halo-dev/${repoProvider.get()}:${tagProvider.get()}"
+    imageName = "ghcr.io/${ghcrNamespaceProvider.get()}/${repoProvider.get()}:${tagProvider.get()}"
     publish = ghcrTokenProvider.map { StringUtils.hasText(it) }.orElse(false)
     if (!isRelease) {
-        tags.add("ghcr.io/halo-dev/${repoProvider.get()}:${branchTagProvider.get()}")
+        tags.add("ghcr.io/${ghcrNamespaceProvider.get()}/${repoProvider.get()}:${branchTagProvider.get()}")
     }
     docker {
         publishRegistry {
