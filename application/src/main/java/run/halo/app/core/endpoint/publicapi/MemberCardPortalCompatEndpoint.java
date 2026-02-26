@@ -12,7 +12,6 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import lombok.extern.slf4j.Slf4j;
@@ -262,7 +261,10 @@ class MemberCardPortalCompatEndpoint {
             return Mono.error(badRequest("Member card not found."));
         }
         var cardTitle = card.path("spec").path("title").asText(cardName);
-        var durationDays = parsePositiveInt(card.path("spec").path("durationDays").asText(null), 30);
+        var durationDays = parsePositiveInt(
+            card.path("spec").path("durationDays").asText(null),
+            30
+        );
         var amountInCents = calculateAmountInCents(card);
         var orderNo = generateOrderNo();
 
@@ -286,7 +288,9 @@ class MemberCardPortalCompatEndpoint {
                 }
                 if (productId <= 0) {
                     return Mono.error(
-                        badRequest("productId must be set to a positive integer when payment is enabled."));
+                        badRequest(
+                            "productId must be set to a positive integer when payment is enabled."
+                        ));
                 }
                 if (!StringUtils.hasText(createOrderUrl)) {
                     return Mono.error(
@@ -563,7 +567,8 @@ class MemberCardPortalCompatEndpoint {
             :root { color-scheme: light; }
             body {
               margin: 0;
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+                sans-serif;
               background: #f6f8fa;
               color: #1f2328;
             }
@@ -923,7 +928,9 @@ class MemberCardPortalCompatEndpoint {
               const validTo = spec.validTo ? fmtDate(spec.validTo) : '-';
               return `
                 <article class="card">
-                  ${image ? `<img class="cover" src="${image}" alt="${title}" />` : '<div class="cover"></div>'}
+                  ${image
+                    ? `<img class="cover" src="${image}" alt="${title}" />`
+                    : '<div class="cover"></div>'}
                   <div class="body">
                     <div class="card-title">${title}</div>
                     <div class="price">
@@ -934,7 +941,12 @@ class MemberCardPortalCompatEndpoint {
                     <div class="meta">有效期：${validFrom} ~ ${validTo}</div>
                     ${desc ? `<div class="meta">${desc}</div>` : ''}
                     <div class="actions">
-                      <button type="button" data-action="buy" data-card-name="${escapeHtml(card.metadata?.name || '')}" ${state.loggedIn ? '' : 'disabled'}>立即下单</button>
+                      <button
+                        type="button"
+                        data-action="buy"
+                        data-card-name="${escapeHtml(card.metadata?.name || '')}"
+                        ${state.loggedIn ? '' : 'disabled'}
+                      >立即下单</button>
                     </div>
                   </div>
                 </article>
@@ -966,8 +978,18 @@ class MemberCardPortalCompatEndpoint {
                   <td>${fmtDate(spec.createdAt)}</td>
                   <td>
                     <div class="order-actions">
-                      <button type="button" class="secondary" data-action="sync-order" data-order-name="${name}">同步状态</button>
-                      <button type="button" data-action="go-pay" data-pay-url="${payUrl}" ${canPay && payUrl ? '' : 'disabled'}>去支付</button>
+                      <button
+                        type="button"
+                        class="secondary"
+                        data-action="sync-order"
+                        data-order-name="${name}"
+                      >同步状态</button>
+                      <button
+                        type="button"
+                        data-action="go-pay"
+                        data-pay-url="${payUrl}"
+                        ${canPay && payUrl ? '' : 'disabled'}
+                      >去支付</button>
                     </div>
                   </td>
                 </tr>
@@ -1026,7 +1048,8 @@ class MemberCardPortalCompatEndpoint {
             } catch (error) {
               state.orders = [];
               state.ordersLoaded = false;
-              el.ordersWrap.innerHTML = `<div class="msg error">订单加载失败：${escapeHtml(error.message)}</div>`;
+              el.ordersWrap.innerHTML =
+                `<div class="msg error">订单加载失败：${escapeHtml(error.message)}</div>`;
             }
           }
 
@@ -1164,7 +1187,9 @@ class MemberCardPortalCompatEndpoint {
             if (vipSelector) {
               return Boolean(document.querySelector(vipSelector));
             }
-            if (document.body && document.body.dataset && document.body.dataset.vipOnly === 'true') {
+            if (document.body
+              && document.body.dataset
+              && document.body.dataset.vipOnly === 'true') {
               return true;
             }
             const tagNodes = Array.from(document.querySelectorAll(
@@ -1236,7 +1261,8 @@ class MemberCardPortalCompatEndpoint {
                 box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
                 padding: 20px 18px 16px;
                 color: #1f2328;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                  Helvetica, Arial, sans-serif;
               }
               .membercard-vip-guard-title {
                 margin: 0 0 10px;
