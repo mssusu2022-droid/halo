@@ -924,8 +924,6 @@ class MemberCardPortalCompatEndpoint {
               const image = escapeHtml(spec.image || '');
               const desc = escapeHtml(spec.description || '');
               const duration = Number(spec.durationDays || 30);
-              const validFrom = spec.validFrom ? fmtDate(spec.validFrom) : '-';
-              const validTo = spec.validTo ? fmtDate(spec.validTo) : '-';
               return `
                 <article class="card">
                   ${image
@@ -938,7 +936,6 @@ class MemberCardPortalCompatEndpoint {
                       <span class="origin">${fmtAmountFromYuan(spec.originalPrice)}</span>
                     </div>
                     <div class="meta">时长：${Number.isFinite(duration) ? duration : 30} 天</div>
-                    <div class="meta">有效期：${validFrom} ~ ${validTo}</div>
                     ${desc ? `<div class="meta">${desc}</div>` : ''}
                     <div class="actions">
                       <button
