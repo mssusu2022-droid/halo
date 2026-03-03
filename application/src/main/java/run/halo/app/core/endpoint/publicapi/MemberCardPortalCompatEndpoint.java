@@ -1337,7 +1337,8 @@ class MemberCardPortalCompatEndpoint {
           const downloadKeywords = ((currentScript
             && currentScript.dataset
             ? currentScript.dataset.downloadKeywords
-            : '') || '网盘,下载,download,百度网盘,阿里云盘,夸克网盘,迅雷')
+            : '') || '网盘,下载,download,百度网盘,'
+            + '阿里云盘,夸克网盘,迅雷,pikpak')
             .split(',')
             .map(item => item.trim().toLowerCase())
             .filter(Boolean);
