@@ -1379,11 +1379,17 @@ class MemberCardPortalCompatEndpoint {
           };
 
           const isDownloadLink = (el) => {
-            if (!el || !(el instanceof HTMLAnchorElement)) return false;
-            if (el.dataset.vipDownload !== undefined) return true;
-            if (el.classList.contains('vip-download')) return true;
-            const text = (el.textContent || '').trim().toLowerCase();
-            const href = (el.getAttribute('href') || '').toLowerCase();
+            if (!el) return false;
+            if (!(el instanceof HTMLAnchorElement)
+              && !el.getAttribute('href')) return false;
+            if (el.dataset && el.dataset.vipDownload !== undefined)
+              return true;
+            if (el.classList && el.classList.contains('vip-download'))
+              return true;
+            const text = (el.textContent || '')
+              .trim().toLowerCase();
+            const href = (el.getAttribute('href') || '')
+              .toLowerCase();
             return downloadKeywords.some(kw =>
               text.includes(kw) || href.includes(kw));
           };
