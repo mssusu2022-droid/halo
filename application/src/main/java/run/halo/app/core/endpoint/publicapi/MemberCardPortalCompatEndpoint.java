@@ -1334,8 +1334,12 @@ class MemberCardPortalCompatEndpoint {
             .split(',')
             .map(item => item.trim().toLowerCase())
             .filter(Boolean);
-          const downloadKeywords = ((currentScript && currentScript.dataset
-            ? currentScript.dataset.downloadKeywords : '') || '网盘,下载,download,百度网盘,阿里云盘,夸克网盘,迅雷,pikpak,mypikpak,123pan,lanzou,蓝奏,天翼,115,mega,mediafire,gofile')
+          const downloadKeywords = ((currentScript
+            && currentScript.dataset
+            ? currentScript.dataset.downloadKeywords : '')
+            || ('网盘,下载,download,百度网盘,阿里云盘,'
+            + '夸克网盘,迅雷,pikpak,mypikpak,123pan,'
+            + 'lanzou,蓝奏,天翼,115,mega,mediafire,gofile'))
             .split(',')
             .map(item => item.trim().toLowerCase())
             .filter(Boolean);
