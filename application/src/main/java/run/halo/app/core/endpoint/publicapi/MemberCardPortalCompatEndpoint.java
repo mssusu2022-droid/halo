@@ -1594,13 +1594,18 @@ class MemberCardPortalCompatEndpoint {
           };
 
           /* --- Download links: VIP pages require login + VIP --- */
+          const findClickedLink = (target) => {
+            if (!target || !target.closest) return null;
+            const a = target.closest('a[href]');
+            if (a) return a;
+            const card = target.closest(
+              'hyperlink-card[href]');
+            return card || null;
+          };
+
           const handleDownloadClick = async (event) => {
-            const anchor = event.target && event.target.closest
-              ? event.target.closest('a[href]') : null;
+            const anchor = findClickedLink(event.target);
             if (!anchor) return;
-            if (!pageNeedsVip() && !isDownloadLink(anchor)) return;
-            if (!isDownloadLink(anchor) && !pageNeedsVip()) return;
-            // Only intercept download links on VIP pages
             if (!isDownloadLink(anchor)) return;
             if (!pageNeedsVip()) return;
 
@@ -1620,7 +1625,8 @@ class MemberCardPortalCompatEndpoint {
             // VIP user: allow download
             const href = anchor.getAttribute('href');
             if (href) {
-              window.open(href, anchor.getAttribute('target') || '_blank');
+              window.open(href,
+                anchor.getAttribute('target') || '_blank');
             }
           };
 
