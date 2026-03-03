@@ -10,6 +10,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -83,6 +84,9 @@ class MemberCardPortalCompatEndpoint {
             .GET("/membercard/cards", this::listPublicCards)
             .GET("/membercard/orders", this::listOwnOrders)
             .POST("/membercard/orders", this::createOrderCompat)
+            .GET("/membercard/vip/config", this::getVipConfig)
+            .GET("/membercard/vip/status", this::getVipStatus)
+            .GET("/membercard/vip/check-post/{postName}", this::checkPostVipAccess)
             .GET("/membercard/portal/member-card", this::renderMemberCardPage)
             .GET("/membercard/portal/vip-guard.js", this::renderVipGuardScript)
             .build();
@@ -542,6 +546,174 @@ class MemberCardPortalCompatEndpoint {
 
     private ResponseStatusException badRequest(String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private static final String SYSTEM_CONFIG_STORE_NAME =
+        "/registry/configmaps/system";
+    private static final String SYSTEM_CONFIG_DEFAULT_STORE_NAME =
+        "/registry/configmaps/system-default";
+
+    /**
+     * Public endpoint: returns VIP icon config from system settings.
+     * Checks override config first, then falls back to default config.
+     */
+    private Mono<ServerResponse> getVipConfig(ServerRequest request) {
+        return extractVipFromStore(SYSTEM_CONFIG_STORE_NAME)
+            .switchIfEmpty(Mono.defer(
+                () -> extractVipFromStore(SYSTEM_CONFIG_DEFAULT_STORE_NAME)))
+            .flatMap(vipResult -> ServerResponse.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(vipResult))
+            .switchIfEmpty(Mono.defer(() -> ServerResponse.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("vipIconUrl", "", "vipIconText", "VIP"))));
+    }
+
+    private Mono<Map<String, String>> extractVipFromStore(String storeName) {
+        return extensionStoreClient.fetchByName(storeName)
+            .flatMap(store -> Mono.fromCallable(
+                () -> objectMapper.readTree(store.getData()))
+                .onErrorResume(ex -> Mono.empty()))
+            .flatMap(configMap -> {
+                var vipJson = configMap.path("data").path("vip").asText(null);
+                if (!StringUtils.hasText(vipJson)) {
+                    return Mono.empty();
+                }
+                try {
+                    var vipConfig = objectMapper.readTree(vipJson);
+                    var iconUrl = vipConfig.path("vipIconUrl").asText("");
+                    var iconText = vipConfig.path("vipIconText").asText("VIP");
+                    if (!StringUtils.hasText(iconUrl) && "VIP".equals(iconText)) {
+                        return Mono.empty();
+                    }
+                    return Mono.just(Map.of("vipIconUrl", iconUrl, "vipIconText", iconText));
+                } catch (Exception ex) {
+                    return Mono.empty();
+                }
+            });
+    }
+
+    /**
+     * VIP status endpoint: returns login status, VIP status, and expiration time.
+     */
+    private Mono<ServerResponse> getVipStatus(ServerRequest request) {
+        return ReactiveSecurityContextHolder.getContext()
+            .map(ctx -> ctx.getAuthentication())
+            .filter(this::isAuthenticatedUser)
+            .flatMap(auth -> {
+                var userName = auth.getName();
+                return computeVipStatus(userName)
+                    .flatMap(status -> ServerResponse.ok()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(status));
+            })
+            .switchIfEmpty(Mono.defer(() -> ServerResponse.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of(
+                    "loggedIn", false,
+                    "vip", false,
+                    "memberCardPageUrl", "/membercard/portal/member-card"
+                ))));
+    }
+
+    private Mono<Map<String, Object>> computeVipStatus(String userName) {
+        var now = Instant.now();
+        return extensionStoreClient.listByNamePrefix(MEMBER_CARD_ORDER_STORE_PATH_PREFIX)
+            .flatMap(this::readOrderAsJson)
+            .filter(order ->
+                userName.equals(order.path("spec").path("userName").asText(null))
+                    && order.path("spec").path("status").asInt(0) == 3)
+            .map(order -> {
+                var createdAt = parseInstant(
+                    order.path("spec").path("createdAt").asText(null));
+                var durationDays = order.path("spec").path("durationDays").asInt(0);
+                if (createdAt != null && durationDays > 0) {
+                    return createdAt.plus(durationDays, ChronoUnit.DAYS);
+                }
+                return Instant.MIN;
+            })
+            .filter(expireAt -> expireAt.isAfter(now))
+            .reduce((a, b) -> a.isAfter(b) ? a : b)
+            .map(latestExpireAt -> {
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("loggedIn", true);
+                result.put("vip", true);
+                result.put("expireAt", latestExpireAt.toString());
+                result.put("memberCardPageUrl", "/membercard/portal/member-card");
+                return result;
+            })
+            .defaultIfEmpty(Map.of(
+                "loggedIn", true,
+                "vip", false,
+                "memberCardPageUrl", "/membercard/portal/member-card"
+            ));
+    }
+
+    /**
+     * Check if a post is VIP-only and whether the current user has access.
+     * Returns JSON: {vipOnly, hasAccess, loggedIn, vip}
+     */
+    private Mono<ServerResponse> checkPostVipAccess(ServerRequest request) {
+        var postName = request.pathVariable("postName");
+        var postStoreName = "/registry/content.halo.run/posts/" + postName;
+
+        return extensionStoreClient.fetchByName(postStoreName)
+            .flatMap(store -> Mono.fromCallable(
+                () -> objectMapper.readTree(store.getData()))
+                .onErrorResume(ex -> Mono.empty()))
+            .flatMap(postJson -> {
+                var vipOnlyStr = postJson.path("metadata").path("annotations")
+                    .path("content.halo.run/vip-only").asText(null);
+                var isVipOnly = "true".equals(vipOnlyStr);
+
+                if (!isVipOnly) {
+                    return ServerResponse.ok()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(Map.of(
+                            "vipOnly", false,
+                            "hasAccess", true
+                        ));
+                }
+
+                return ReactiveSecurityContextHolder.getContext()
+                    .map(ctx -> ctx.getAuthentication())
+                    .filter(this::isAuthenticatedUser)
+                    .flatMap(auth -> computeVipStatus(auth.getName())
+                        .flatMap(status -> {
+                            var isVip = Boolean.TRUE.equals(status.get("vip"));
+                            return ServerResponse.ok()
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Map.of(
+                                    "vipOnly", true,
+                                    "hasAccess", isVip,
+                                    "loggedIn", true,
+                                    "vip", isVip
+                                ));
+                        }))
+                    .switchIfEmpty(Mono.defer(() -> {
+                        if (isVipOnly) {
+                            return ServerResponse.status(HttpStatus.FORBIDDEN)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .bodyValue(Map.of(
+                                    "vipOnly", true,
+                                    "hasAccess", false,
+                                    "loggedIn", false,
+                                    "vip", false,
+                                    "message",
+                                    "This content requires VIP access."
+                                ));
+                        }
+                        return ServerResponse.ok()
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .bodyValue(Map.of(
+                                "vipOnly", false,
+                                "hasAccess", true
+                            ));
+                    }));
+            })
+            .switchIfEmpty(Mono.defer(() -> ServerResponse.status(HttpStatus.NOT_FOUND)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("message", "Post not found."))));
     }
 
     private Mono<ServerResponse> renderMemberCardPage(ServerRequest request) {
@@ -1162,6 +1334,11 @@ class MemberCardPortalCompatEndpoint {
             .split(',')
             .map(item => item.trim().toLowerCase())
             .filter(Boolean);
+          const downloadKeywords = ((currentScript && currentScript.dataset
+            ? currentScript.dataset.downloadKeywords : '') || '网盘,下载,download,百度网盘,阿里云盘,夸克网盘,迅雷,pikpak,mypikpak,123pan,lanzou,蓝奏,天翼,115,mega,mediafire,gofile')
+            .split(',')
+            .map(item => item.trim().toLowerCase())
+            .filter(Boolean);
           const cacheMsRaw = currentScript && currentScript.dataset
             ? currentScript.dataset.cacheMs : '';
           const cacheMs = Number(cacheMsRaw || 30000) > 0
@@ -1191,11 +1368,21 @@ class MemberCardPortalCompatEndpoint {
             }
             const tagNodes = Array.from(document.querySelectorAll(
               'a[href*="/tags/"], a[href*="/tag/"], [rel="tag"], .tag a, .post-tags a'
-            ));
+            )).filter(node => !node.closest('aside, nav, .sidebar, .widget'));
             const tagTexts = tagNodes
               .map(node => (node.textContent || '').trim().toLowerCase())
               .filter(Boolean);
             return tagTexts.some(text => vipKeywords.some(keyword => text.includes(keyword)));
+          };
+
+          const isDownloadLink = (el) => {
+            if (!el || !(el instanceof HTMLAnchorElement)) return false;
+            if (el.dataset.vipDownload !== undefined) return true;
+            if (el.classList.contains('vip-download')) return true;
+            const text = (el.textContent || '').trim().toLowerCase();
+            const href = (el.getAttribute('href') || '').toLowerCase();
+            return downloadKeywords.some(kw =>
+              text.includes(kw) || href.includes(kw));
           };
 
           const fetchVipStatus = async (forceRefresh = false) => {
@@ -1304,14 +1491,22 @@ class MemberCardPortalCompatEndpoint {
             }
           };
 
-          const showVipDialog = (status) => {
+          const showVipDialog = (status, context) => {
             ensureDialogStyle();
             closeDialog();
             const loggedIn = Boolean(status && status.loggedIn);
-            const title = loggedIn ? '仅 VIP 用户可播放' : '请先登录';
-            const tip = loggedIn
-              ? '当前账号未开通 VIP，开通会员后即可播放该视频。'
-              : '当前未登录，请先登录，登录后再校验 VIP 权限。';
+            const ctx = context || 'play';
+            let title, tip;
+            if (!loggedIn) {
+              title = '请先登录';
+              tip = '当前未登录，请先登录后再继续操作。';
+            } else if (ctx === 'download') {
+              title = '仅 VIP 用户可下载';
+              tip = '当前账号未开通 VIP，开通会员后即可下载该资源。';
+            } else {
+              title = '仅 VIP 用户可播放';
+              tip = '当前账号未开通 VIP，开通会员后即可播放该视频。';
+            }
             const primaryText = loggedIn ? '去充值' : '去登录';
 
             dialogEl = document.createElement('div');
@@ -1349,41 +1544,89 @@ class MemberCardPortalCompatEndpoint {
             });
           };
 
-          const checkVipAndRedirect = async () => {
+          const checkVipAndRedirect = async (context) => {
             if (!pageNeedsVip()) {
               return true;
             }
             const status = await fetchVipStatus();
             if (!status || !status.loggedIn) {
-              showVipDialog({ loggedIn: false, vip: false, memberCardPageUrl: MEMBER_CARD_PAGE });
+              showVipDialog({ loggedIn: false, vip: false,
+                memberCardPageUrl: MEMBER_CARD_PAGE }, context);
               return false;
             }
             if (status.vip) {
               return true;
             }
-            showVipDialog(status);
+            showVipDialog(status, context);
             return false;
           };
 
+          /* --- Video play: requires login; VIP pages require VIP --- */
           const handleVideoPlay = async (event) => {
             const target = event.target;
-            if (!(target instanceof HTMLVideoElement)) {
+            if (!(target instanceof HTMLVideoElement)
+              && !(target instanceof HTMLAudioElement)) {
               return;
             }
-            const allowed = await checkVipAndRedirect();
-            if (allowed) {
+            const status = await fetchVipStatus();
+            // Rule: play always requires login
+            if (!status || !status.loggedIn) {
+              target.pause();
+              try { target.currentTime = 0; } catch (_) {}
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              showVipDialog({ loggedIn: false, vip: false,
+                memberCardPageUrl: MEMBER_CARD_PAGE }, 'play');
               return;
             }
-            target.pause();
-            target.currentTime = 0;
+            // Rule: VIP pages require VIP to play
+            if (pageNeedsVip() && !status.vip) {
+              target.pause();
+              try { target.currentTime = 0; } catch (_) {}
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              showVipDialog(status, 'play');
+              return;
+            }
+          };
+
+          /* --- Download links: VIP pages require login + VIP --- */
+          const handleDownloadClick = async (event) => {
+            const anchor = event.target && event.target.closest
+              ? event.target.closest('a[href]') : null;
+            if (!anchor) return;
+            if (!pageNeedsVip() && !isDownloadLink(anchor)) return;
+            if (!isDownloadLink(anchor) && !pageNeedsVip()) return;
+            // Only intercept download links on VIP pages
+            if (!isDownloadLink(anchor)) return;
+            if (!pageNeedsVip()) return;
+
             event.preventDefault();
             event.stopImmediatePropagation();
+
+            const status = await fetchVipStatus();
+            if (!status || !status.loggedIn) {
+              showVipDialog({ loggedIn: false, vip: false,
+                memberCardPageUrl: MEMBER_CARD_PAGE }, 'download');
+              return;
+            }
+            if (!status.vip) {
+              showVipDialog(status, 'download');
+              return;
+            }
+            // VIP user: allow download
+            const href = anchor.getAttribute('href');
+            if (href) {
+              window.open(href, anchor.getAttribute('target') || '_blank');
+            }
           };
 
           window.MemberCardVipGuard = {
             checkVipAndRedirect,
             pageNeedsVip,
             showVipDialog,
+            fetchVipStatus,
+            isDownloadLink,
             memberCardPage: MEMBER_CARD_PAGE
           };
 
@@ -1391,6 +1634,7 @@ class MemberCardPortalCompatEndpoint {
             return;
           }
           document.addEventListener('play', handleVideoPlay, true);
+          document.addEventListener('click', handleDownloadClick, true);
         })();
         """;
 }

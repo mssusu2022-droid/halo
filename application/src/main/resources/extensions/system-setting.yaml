@@ -249,6 +249,20 @@ spec:
               value: '/categories/{categorySlug}/{slug}'
           name: post
           validation: required
+    - group: vip
+      label: VIP 设置
+      formSchema:
+        - $formkit: attachment
+          label: "VIP 图标"
+          name: vipIconUrl
+          accepts:
+            - 'image/*'
+          help: "用于在文章列表和前台展示的 VIP 图标，建议使用 PNG/SVG 格式"
+        - $formkit: text
+          label: "VIP 图标文字"
+          name: vipIconText
+          value: "VIP"
+          help: "未设置图标时显示的文字标识"
     - group: codeInjection
       label: 代码注入
       formSchema:

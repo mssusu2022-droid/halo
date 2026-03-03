@@ -124,6 +124,8 @@ const handleSave = async () => {
     ...customAnnotations,
   };
 
+  mergeVipAnnotation();
+
   if (props.onlyEmit) {
     emit("saved", formState.value);
     modal.value?.close();
@@ -244,6 +246,29 @@ const publishTimeHelp = computed(() => {
 const { templates } = useThemeCustomTemplates("post");
 
 const annotationsFormRef = ref<InstanceType<typeof AnnotationsForm>>();
+
+// VIP only
+const VIP_ANNO_KEY = "content.halo.run/vip-only";
+const vipOnly = ref(false);
+
+watch(
+  () => formState.value.metadata.annotations,
+  (annotations) => {
+    vipOnly.value = annotations?.[VIP_ANNO_KEY] === "true";
+  },
+  { immediate: true }
+);
+
+const mergeVipAnnotation = () => {
+  if (!formState.value.metadata.annotations) {
+    formState.value.metadata.annotations = {};
+  }
+  if (vipOnly.value) {
+    formState.value.metadata.annotations[VIP_ANNO_KEY] = "true";
+  } else {
+    delete formState.value.metadata.annotations[VIP_ANNO_KEY];
+  }
+};
 
 // slug
 const { handleGenerateSlug } = useSlugify(
@@ -444,6 +469,13 @@ const showCancelPublishButton = computed(() => {
               :label="$t('core.post.settings.fields.pinned.label')"
               name="pinned"
               type="checkbox"
+            ></FormKit>
+            <FormKit
+              v-model="vipOnly"
+              :label="$t('core.post.settings.fields.vip_only.label')"
+              name="vipOnly"
+              type="checkbox"
+              :help="$t('core.post.settings.fields.vip_only.help')"
             ></FormKit>
             <FormKit
               v-model="formState.spec.visible"

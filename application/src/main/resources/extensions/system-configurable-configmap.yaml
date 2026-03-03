@@ -51,6 +51,11 @@ data:
     {
       "search-engine": ["search-engine-lucene"]
     }
+  vip: |
+    {
+      "vipIconUrl": "",
+      "vipIconText": "VIP"
+    }
   authProvider: |
     {
       "states": [{

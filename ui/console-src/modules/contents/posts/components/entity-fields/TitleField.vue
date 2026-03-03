@@ -20,6 +20,13 @@ const props = withDefaults(
 
 const { t } = useI18n();
 
+const isVipOnly = computed(() => {
+  return (
+    props.post.post.metadata.annotations?.["content.halo.run/vip-only"] ===
+    "true"
+  );
+});
+
 const externalUrl = computed(() => {
   const { status, metadata } = props.post.post;
   if (metadata.labels?.[postLabels.PUBLISHED] === "true") {
@@ -60,6 +67,13 @@ const commentText = computed(() => {
   >
     <template #extra>
       <VSpace>
+        <span
+          v-if="isVipOnly"
+          v-tooltip="$t('core.post.list.fields.vip_only')"
+          class="inline-flex items-center rounded-sm bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-sm"
+        >
+          VIP
+        </span>
         <RouterLink
           v-if="post.post.status?.inProgress"
           v-tooltip="$t('core.common.tooltips.unpublished_content_tip')"
