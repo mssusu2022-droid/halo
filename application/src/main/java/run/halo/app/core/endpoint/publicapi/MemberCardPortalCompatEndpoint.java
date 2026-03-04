@@ -845,6 +845,7 @@ class MemberCardPortalCompatEndpoint {
             .sale { color: #cf222e; font-weight: 700; font-size: 22px; }
             .origin { color: #8c959f; text-decoration: line-through; font-size: 14px; }
             .meta { color: #57606a; font-size: 13px; }
+            .card-desc { white-space: pre-line; line-height: 1.5; }
             .actions { margin-top: auto; }
             .order-actions { display: flex; gap: 6px; flex-wrap: wrap; }
             .empty { padding: 16px 8px; color: #57606a; text-align: center; }
@@ -1108,7 +1109,7 @@ class MemberCardPortalCompatEndpoint {
                       <span class="origin">${fmtAmountFromYuan(spec.originalPrice)}</span>
                     </div>
                     <div class="meta">时长：${Number.isFinite(duration) ? duration : 30} 天</div>
-                    ${desc ? `<div class="meta">${desc}</div>` : ''}
+                    ${desc ? `<div class="meta card-desc">${desc}</div>` : ''}
                     <div class="actions">
                       <button
                         type="button"
